@@ -48,6 +48,7 @@ namespace StopwatchOverlay
         private int _currentMode = 0;
         private TimeSpan _countdownDuration = TimeSpan.FromMinutes(5);
         private TimeSpan _countdownRemaining;
+        private bool _countdownStarted;
         private bool _colonVisible = true;
         private int _timeFormat = 0; // 0=HH:MM:SS.t, 1=HH:MM:SS, 2=MM:SS.t, 3=MM:SS
         private int _frameRate = 30;
@@ -290,6 +291,7 @@ namespace StopwatchOverlay
 
             CountdownPanel.Visibility = _currentMode == 2 ? Visibility.Visible : Visibility.Collapsed;
             UpdateButtonStates();
+            UpdateActionButtonLabels();
             UpdateTimeDisplay();
 
             string[] modeNames = { "Stopwatch", "Clock", "Countdown", "Timecode" };
@@ -301,7 +303,7 @@ namespace StopwatchOverlay
         {
             if (_isRunning)
             {
-                // Stop
+                // Pause. In countdown mode this preserves the remaining duration.
                 _stopwatch.Stop();
                 _isRunning = false;
                 StartStopButton.Content = "▶ Start (Win+F5)";
@@ -317,17 +319,15 @@ namespace StopwatchOverlay
             }
             else
             {
-                // Start
-                if (_currentMode == 2) // Countdown
+                // Start a new countdown only once. Subsequent starts resume from the paused value.
+                if (_currentMode == 2 && !_countdownStarted)
                 {
-                    if (!_isRunning)
-                    {
-                        int.TryParse(CountdownHours.Text, out int hours);
-                        int.TryParse(CountdownMinutes.Text, out int mins);
-                        int.TryParse(CountdownSeconds.Text, out int secs);
-                        _countdownDuration = TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
-                        _countdownRemaining = _countdownDuration;
-                    }
+                    int.TryParse(CountdownHours.Text, out int hours);
+                    int.TryParse(CountdownMinutes.Text, out int mins);
+                    int.TryParse(CountdownSeconds.Text, out int secs);
+                    _countdownDuration = TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
+                    _countdownRemaining = _countdownDuration;
+                    _countdownStarted = true;
                 }
                 
                 _stopwatch.Start();
@@ -406,6 +406,7 @@ namespace StopwatchOverlay
                 int.TryParse(CountdownSeconds.Text, out int secs);
                 _countdownDuration = TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
                 _countdownRemaining = _countdownDuration;
+                _countdownStarted = false;
             }
             
             _lapTimes.Clear();
@@ -785,7 +786,11 @@ namespace StopwatchOverlay
 
         private void UpdateActionButtonLabels()
         {
-            StartStopButton.Content = Translate(_isRunning ? "⏹ Stop (Win+F5)" : "▶ Start (Win+F5)");
+            var startStopLabel = _currentMode == 2
+                ? _isRunning ? "⏸ Pause (Win+F5)" : _countdownStarted ? "▶ Resume (Win+F5)" : "▶ Start (Win+F5)"
+                : _isRunning ? "⏹ Stop (Win+F5)" : "▶ Start (Win+F5)";
+            StartStopButton.Content = Translate(startStopLabel);
+            StartStopButton.Style = (Style)FindResource(_currentMode == 2 && _isRunning ? "PauseButton" : _isRunning ? "StopButton" : "StartButton");
             ResetButton.Content = Translate("↻ Reset (Win+F6)");
             ToggleOverlayButton.Content = Translate(_overlayWindows.Count > 0 ? "🙈 Hide (Win+F7)" : "👁 Show (Win+F7)");
             LapButton.Content = Translate("⚑ Lap (Win+F8)");
@@ -965,6 +970,8 @@ namespace StopwatchOverlay
                 ["sec"] = "秒",
                 ["▶ Start (Win+F5)"] = "▶ 开始 (Win+F5)",
                 ["⏹ Stop (Win+F5)"] = "⏹ 停止 (Win+F5)",
+                ["⏸ Pause (Win+F5)"] = "⏸ 暂停 (Win+F5)",
+                ["▶ Resume (Win+F5)"] = "▶ 继续 (Win+F5)",
                 ["↻ Reset (Win+F6)"] = "↻ 重置 (Win+F6)",
                 ["👁 Show (Win+F7)"] = "👁 显示 (Win+F7)",
                 ["🙈 Hide (Win+F7)"] = "🙈 隐藏 (Win+F7)",
