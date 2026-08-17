@@ -2,13 +2,20 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Stopwatch Controller" 
-        Height="920" Width="680"
+        Height="760" Width="680"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
-        MinWidth="640" MinHeight="700"
+        MinWidth="640" MinHeight="620"
         Closing="Window_Closing">
     
-    <Grid Margin="15">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="15,15,15,6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -19,7 +26,6 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Title -->
@@ -47,15 +53,27 @@
         </StackPanel>
 
         <!-- Countdown Duration (only visible in countdown mode) -->
-        <StackPanel x:Name="CountdownPanel" Grid.Row="2" Orientation="Horizontal" 
+        <StackPanel x:Name="CountdownPanel" Grid.Row="2"
                     HorizontalAlignment="Center" Margin="0,0,0,10" Visibility="Collapsed">
-            <TextBlock Text="Duration: " Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" VerticalAlignment="Center"/>
-            <TextBox x:Name="CountdownMinutes" Width="40" Text="5" 
-                     TextAlignment="Center" VerticalContentAlignment="Center"/>
-            <TextBlock Text=" min " Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" VerticalAlignment="Center"/>
-            <TextBox x:Name="CountdownSeconds" Width="40" Text="00" 
-                     TextAlignment="Center" VerticalContentAlignment="Center"/>
-            <TextBlock Text=" sec" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="Duration: " Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" VerticalAlignment="Center"/>
+                <TextBox x:Name="CountdownHours" Width="72" Height="40" Text="0"
+                         Padding="8,0" TextAlignment="Center" VerticalContentAlignment="Center"/>
+                <TextBlock Text=" h " Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" VerticalAlignment="Center"/>
+                <TextBox x:Name="CountdownMinutes" Width="72" Height="40" Text="5"
+                         Padding="8,0" TextAlignment="Center" VerticalContentAlignment="Center"/>
+                <TextBlock Text=" min " Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" VerticalAlignment="Center"/>
+                <TextBox x:Name="CountdownSeconds" Width="72" Height="40" Text="00"
+                         Padding="8,0" TextAlignment="Center" VerticalContentAlignment="Center"/>
+                <TextBlock Text=" sec" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" VerticalAlignment="Center"/>
+            </StackPanel>
+            <WrapPanel HorizontalAlignment="Center" Margin="0,8,0,0">
+                <Button x:Name="QuickPreset1Button" Content="1 min" Tag="1" Click="CountdownPreset_Click" MouseRightButtonUp="QuickPreset_MouseRightButtonUp" ToolTip="Right-click to edit" Padding="10,4" Margin="3,0"/>
+                <Button x:Name="QuickPreset2Button" Content="5 min" Tag="2" Click="CountdownPreset_Click" MouseRightButtonUp="QuickPreset_MouseRightButtonUp" ToolTip="Right-click to edit" Padding="10,4" Margin="3,0"/>
+                <Button x:Name="QuickPreset3Button" Content="10 min" Tag="3" Click="CountdownPreset_Click" MouseRightButtonUp="QuickPreset_MouseRightButtonUp" ToolTip="Right-click to edit" Padding="10,4" Margin="3,0"/>
+                <Button x:Name="QuickPreset4Button" Content="30 min" Tag="4" Click="CountdownPreset_Click" MouseRightButtonUp="QuickPreset_MouseRightButtonUp" ToolTip="Right-click to edit" Padding="10,4" Margin="3,0"/>
+                <Button x:Name="QuickPreset5Button" Content="1 h" Tag="5" Click="CountdownPreset_Click" MouseRightButtonUp="QuickPreset_MouseRightButtonUp" ToolTip="Right-click to edit" Padding="10,4" Margin="3,0"/>
+            </WrapPanel>
         </StackPanel>
 
         <!-- Current Time Display -->
@@ -113,7 +131,7 @@
         </WrapPanel>
 
         <!-- Settings Expander -->
-        <Expander Grid.Row="7" Header="Settings" IsExpanded="True" Margin="0,0,0,6">
+        <Expander Grid.Row="7" Header="Settings" IsExpanded="False" Margin="0,0,0,6">
             <StackPanel>
                 <!-- Screen and Position -->
                 <TextBlock Text="Screen &amp; Position" FontSize="13" FontWeight="SemiBold" Opacity="0.7" Margin="0,4,0,6"/>
@@ -123,6 +141,7 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
@@ -154,6 +173,13 @@
                             <ComboBoxItem Content="Bottom Left"/>
                             <ComboBoxItem Content="Bottom Center"/>
                             <ComboBoxItem Content="Bottom Right"/>
+                        </ComboBox>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Language:"
+                                   VerticalAlignment="Center" Margin="0,8,10,0"/>
+                        <ComboBox Grid.Row="3" Grid.Column="1" x:Name="LanguageSelector" Margin="0,8,0,0">
+                            <ComboBoxItem Content="English" Tag="en" IsSelected="True"/>
+                            <ComboBoxItem Content="中文" Tag="zh"/>
                         </ComboBox>
                 </Grid>
 
@@ -308,8 +334,11 @@
             </Grid>
         </GroupBox>
 
-        <!-- Status Bar -->
-        <Border Grid.Row="9" CornerRadius="4" Padding="8" Margin="0,6,0,0"
+        </Grid>
+        </ScrollViewer>
+
+        <!-- Fixed status bar: remains visible while the settings content scrolls. -->
+        <Border Grid.Row="1" CornerRadius="4" Padding="8" Margin="15,0,15,15"
                 Background="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}">
             <Grid>
                 <Grid.ColumnDefinitions>

@@ -1,101 +1,60 @@
-# ⏱️ Stopwatch Overlay
+# Stopwatch Overlay
 
-A transparent, always-on-top timer overlay for Windows — perfect for video recordings, live streams, and presentations.
+Windows 桌面悬浮计时器，可始终置顶显示在录屏、直播、演示或全屏应用上方。
 
-[![Download](https://img.shields.io/github/v/release/clemensv/stopwatch?label=Download&style=for-the-badge)](https://github.com/clemensv/stopwatch/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+![Stopwatch Overlay Controller](controller-window.png)
 
-**🌐 [Project Website](https://clemensv.github.io/stopwatch/)**
+## 功能
 
-<p align="center">
-  <img src="controller-window.png" alt="Stopwatch Overlay Controller" width="400">
-</p>
+- 四种模式：秒表、时钟、倒计时、时间码。
+- 支持多显示器，可显示到单个或全部屏幕。
+- 开始计时（按钮或 `Win+F5`）后自动显示悬浮窗。
+- 悬浮窗可拖动，并会按显示器记住上次的精确位置。
+- 自定义文字颜色、描边、字体、大小与背景透明度。
+- 倒计时支持时、分、秒输入，以及快捷时长按钮；右键快捷按钮可修改其分钟数。
+- 支持鼠标穿透、REC 指示器、光环边框、分段计时和全局快捷键。
+- 支持 English / 中文 界面切换。
+- 设置自动保存至 `%LocalAppData%\StopwatchOverlay\settings.json`，升级或单文件发布后仍会保留。
 
----
+## 快捷键
 
-## What It Does
+| 快捷键 | 操作 |
+| --- | --- |
+| `Win+F5` | 开始 / 停止 |
+| `Win+F6` | 重置 |
+| `Win+F7` | 显示 / 隐藏悬浮窗 |
+| `Win+F8` | 记录分段时间 |
 
-Stopwatch Overlay places a customizable timer on top of all your windows — including fullscreen apps and camera feeds. Control it with global hotkeys so you never have to switch away from what you're recording.
+## 使用方法
 
-### Features
+1. 运行 `StopwatchOverlay.exe`。
+2. 选择计时模式；倒计时可直接输入时、分、秒。
+3. 点击开始，悬浮窗会自动显示。
+4. 拖动悬浮窗到所需位置；下次开始会恢复该位置。
+5. 展开 **Settings / 设置**，选择语言、屏幕、外观和其他选项。
+6. 右键倒计时快捷按钮即可编辑对应的快捷分钟数。
 
-- ⏱️ **Four modes** — Stopwatch, real-time clock, countdown timer, and frame-accurate timecode
-- 🖥️ **Multi-monitor** — Show the overlay on one screen or all screens at once
-- 📌 **Always on top** — Stays visible over fullscreen apps, games, and camera feeds
-- 🎨 **Fully customizable** — Text color, border, font, size, background opacity
-- ⌨️ **Global hotkeys** — F9–F12 work from any application
-- 🏁 **Lap times** — Record split times while the timer runs
--  **REC indicator** — Optional blinking recording dot
-- 🖱️ **Click-through mode** — Overlay doesn't interfere with mouse clicks
-- 👻 **Hidden from Alt+Tab** — Keeps your taskbar clean
+## 构建
 
----
+项目使用 .NET 10 和 WPF。请安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)，然后在仓库根目录执行：
 
-## Download & Install
+```powershell
+dotnet build .\StopwatchOverlay\StopwatchOverlay.csproj -c Release
+dotnet publish .\StopwatchOverlay\StopwatchOverlay.csproj -c Release
+```
 
-1. **Download** the latest `StopwatchOverlay-vX.X.X.zip` from the **[Releases page](https://github.com/clemensv/stopwatch/releases/latest)**
-2. **Extract** the ZIP to any folder, for example:
-   ```
-   C:\Tools\StopwatchOverlay\
-   ```
-3. **Run** `StopwatchOverlay.exe` — no installer needed
+发布后的单文件程序位于：
 
-> **Tip:** Pin it to your taskbar or create a desktop shortcut for quick access.
+```text
+StopwatchOverlay\bin\Release\net10.0-windows\win-x64\publish\StopwatchOverlay.exe
+```
 
-### .NET Runtime Requirement
+运行发布版的电脑需要安装对应的 .NET 10 Desktop Runtime。
 
-The app requires the .NET 8.0 Desktop Runtime:
+## 开发说明
 
-| Windows Version | Runtime |
-|---|---|
-| **Windows 11 24H2+** | ✅ Included — nothing to install |
-| **Windows 11 (older)** | Install the [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime) |
-| **Windows 10** | Install the [.NET 8.0 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0/runtime) |
+项目结构和贡献说明见 [DEVELOPERS.md](DEVELOPERS.md)。
 
----
-
-## How to Use
-
-1. Launch **StopwatchOverlay.exe** — the controller window appears
-2. Click **▶ Start** (or press **Win+F5**) to start the timer
-3. Click **👁 Show** (or press **Win+F7**) to display the overlay on screen
-4. Choose your target **screen** and **position** from the dropdowns
-5. Customize colors, font, size, and opacity in the **Settings** panel
-6. **Drag** the overlay with your mouse for pixel-perfect placement
-
-### Keyboard Shortcuts
-
-| Key | Action |
-|---|---|
-| **Win+F5** | Start / Stop |
-| **Win+F6** | Reset |
-| **Win+F7** | Show / Hide overlay |
-| **Win+F8** | Record lap time |
-
-### Modes
-
-| Mode | Description |
-|---|---|
-| **Stopwatch** | Elapsed time with start / stop / reset |
-| **Clock** | Real-time clock (optional blinking colon) |
-| **Countdown** | Configurable countdown, continues into negative |
-| **Timecode** | Frame-accurate display (HH:MM:SS:FF) |
-
----
-
-## Tips
-
-- The overlay uses a semi-transparent dark background — adjust opacity in Settings
-- Text outlines keep the timer readable on any background
-- You can hide the overlay while keeping the timer running
-- Use **click-through mode** so the overlay doesn't interfere with your work
-
----
-
-## For Developers
-
-See [DEVELOPERS.md](DEVELOPERS.md) for build instructions, architecture details, and contribution guidelines.
-
-## License
+## 许可证
 
 [MIT](LICENSE)

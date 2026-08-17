@@ -40,6 +40,7 @@ namespace StopwatchOverlay
         private readonly DispatcherTimer _blinkTimer;
         private readonly List<OverlayWindow> _overlayWindows = new();
         private readonly List<LightRingWindow> _lightRingWindows = new();
+        private Dictionary<string, OverlayPosition> _overlayPositions = new();
         private bool _isRunning = false;
         private Screen? _selectedScreen;
         
@@ -50,6 +51,15 @@ namespace StopwatchOverlay
         private bool _colonVisible = true;
         private int _timeFormat = 0; // 0=HH:MM:SS.t, 1=HH:MM:SS, 2=MM:SS.t, 3=MM:SS
         private int _frameRate = 30;
+        private string _quickPreset1 = "1";
+        private string _quickPreset2 = "5";
+        private string _quickPreset3 = "10";
+        private string _quickPreset4 = "30";
+        private string _quickPreset5 = "60";
+        private string _language = "en";
+        private bool _languageReady;
+        private bool _isLoadingSettings;
+        private bool _canSaveSettings;
 
         private readonly ObservableCollection<string> _lapTimes = new();
         private int _lapCount = 0;
@@ -73,9 +83,26 @@ namespace StopwatchOverlay
             LapListBox.ItemsSource = _lapTimes;
 
             PopulateScreens();
+            LoadSettings();
             UpdateButtonStates();
             _timer.Start();
             _blinkTimer.Start();
+
+            AutoStartCheckBox.Checked += SettingsControlChanged;
+            AutoStartCheckBox.Unchecked += SettingsControlChanged;
+            BlinkColonCheckBox.Checked += SettingsControlChanged;
+            BlinkColonCheckBox.Unchecked += SettingsControlChanged;
+            CountdownHours.TextChanged += SettingsTextChanged;
+            CountdownMinutes.TextChanged += SettingsTextChanged;
+            CountdownSeconds.TextChanged += SettingsTextChanged;
+
+            LanguageSelector.SelectionChanged += LanguageSelector_SelectionChanged;
+
+            // XAML controls raise change events while the window is being created.
+            // Only allow persistence after the saved values have been restored.
+            _canSaveSettings = true;
+            _languageReady = true;
+            ApplyLanguage();
         }
 
         private void ThemeModeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -90,6 +117,7 @@ namespace StopwatchOverlay
             #pragma warning disable WPF0001
             System.Windows.Application.Current.ThemeMode = mode;
             #pragma warning restore WPF0001
+            SaveSettings();
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -266,6 +294,7 @@ namespace StopwatchOverlay
 
             string[] modeNames = { "Stopwatch", "Clock", "Countdown", "Timecode" };
             UpdateStatus($"{modeNames[_currentMode]} Mode", Brushes.DeepSkyBlue);
+            SaveSettings();
         }
 
         private void StartStopButton_Click(object sender, RoutedEventArgs e)
@@ -293,9 +322,10 @@ namespace StopwatchOverlay
                 {
                     if (!_isRunning)
                     {
+                        int.TryParse(CountdownHours.Text, out int hours);
                         int.TryParse(CountdownMinutes.Text, out int mins);
                         int.TryParse(CountdownSeconds.Text, out int secs);
-                        _countdownDuration = TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
+                        _countdownDuration = TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
                         _countdownRemaining = _countdownDuration;
                     }
                 }
@@ -315,7 +345,51 @@ namespace StopwatchOverlay
                         overlay.SetRecIndicatorVisible(true);
                     }
                 }
+
+                // Starting the timer should make the overlay visible without requiring
+                // a separate Show action (or Win+F7).
+                if (_overlayWindows.Count == 0)
+                {
+                    ToggleOverlayButton_Click(sender, e);
+                }
             }
+
+            UpdateActionButtonLabels();
+        }
+
+        private void LanguageSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_languageReady || LanguageSelector.SelectedItem is not ComboBoxItem item) return;
+
+            _language = item.Tag?.ToString() ?? "en";
+            ApplyLanguage();
+            SaveSettings();
+        }
+
+        private void CountdownPreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.Button { Tag: string tag } ||
+                !int.TryParse(GetQuickPresetText(tag), out int minutes) || minutes < 0) return;
+
+            CountdownHours.Text = "0";
+            CountdownMinutes.Text = minutes.ToString();
+            CountdownSeconds.Text = "00";
+            SaveSettings();
+        }
+
+        private void QuickPreset_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.Button { Tag: string tag }) return;
+
+            var editor = new QuickPresetEditorWindow(GetQuickPresetText(tag)) { Owner = this };
+            if (editor.ShowDialog() == true)
+            {
+                SetQuickPresetText(tag, editor.Minutes.ToString());
+                UpdateQuickPresetButtons();
+                SaveSettings();
+            }
+
+            e.Handled = true;
         }
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)
@@ -327,9 +401,10 @@ namespace StopwatchOverlay
             
             if (_currentMode == 2)
             {
+                int.TryParse(CountdownHours.Text, out int hours);
                 int.TryParse(CountdownMinutes.Text, out int mins);
                 int.TryParse(CountdownSeconds.Text, out int secs);
-                _countdownDuration = TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
+                _countdownDuration = TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
                 _countdownRemaining = _countdownDuration;
             }
             
@@ -346,6 +421,8 @@ namespace StopwatchOverlay
             {
                 overlay.SetRecIndicatorVisible(false);
             }
+
+            UpdateActionButtonLabels();
         }
 
         private void LapButton_Click(object sender, RoutedEventArgs e)
@@ -394,15 +471,35 @@ namespace StopwatchOverlay
                 ToggleOverlayButton.Content = "🙈 Hide (Win+F7)";
                 UpdateStatus($"Overlay visible on {_overlayWindows.Count} screen(s)", Brushes.DeepSkyBlue);
             }
+
+            UpdateActionButtonLabels();
         }
 
         private void CreateOverlayForScreen(Screen screen)
         {
             var overlay = new OverlayWindow();
             ApplyOverlaySettings(overlay);
-            PositionOverlay(overlay, screen);
+            if (_overlayPositions.TryGetValue(screen.DeviceName, out var savedPosition))
+            {
+                overlay.Left = savedPosition.Left;
+                overlay.Top = savedPosition.Top;
+            }
+            else
+            {
+                PositionOverlay(overlay, screen);
+            }
             overlay.Show();
             overlay.UpdateTime(GetFormattedTime());
+
+            overlay.PositionChangedByUser += (_, _) =>
+            {
+                _overlayPositions[screen.DeviceName] = new OverlayPosition
+                {
+                    Left = overlay.Left,
+                    Top = overlay.Top
+                };
+                SaveSettings();
+            };
             
             if (ClickThroughCheckBox?.IsChecked == true)
             {
@@ -432,10 +529,14 @@ namespace StopwatchOverlay
                 _overlayWindows.Clear();
                 ToggleOverlayButton_Click(sender, new RoutedEventArgs());
             }
+            SaveSettings();
         }
 
         private void PositionSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // Selecting a preset position intentionally replaces any dragged position.
+            if (!_isLoadingSettings) _overlayPositions.Clear();
+
             // Reposition all overlays
             if (_overlayWindows.Count > 0)
             {
@@ -443,6 +544,7 @@ namespace StopwatchOverlay
                 _overlayWindows.Clear();
                 ToggleOverlayButton_Click(sender, new RoutedEventArgs());
             }
+            SaveSettings();
         }
 
         private void PositionOverlay(OverlayWindow overlay, Screen screen)
@@ -494,6 +596,7 @@ namespace StopwatchOverlay
         private void AppearanceChanged(object sender, SelectionChangedEventArgs e)
         {
             ApplyAllOverlaySettings();
+            SaveSettings();
         }
 
         private void AppearanceSliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -503,12 +606,14 @@ namespace StopwatchOverlay
             if (BackgroundOpacityLabel != null) BackgroundOpacityLabel.Text = $"{(int)BackgroundOpacitySlider.Value}%";
             
             ApplyAllOverlaySettings();
+            SaveSettings();
         }
 
         private void TimeFormatSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             _timeFormat = TimeFormatSelector?.SelectedIndex ?? 0;
             UpdateTimeDisplay();
+            SaveSettings();
         }
 
         private void ShowRecIndicatorCheckBox_Changed(object sender, RoutedEventArgs e)
@@ -519,6 +624,7 @@ namespace StopwatchOverlay
             {
                 overlay.SetRecIndicatorVisible(show);
             }
+            SaveSettings();
         }
 
         private void ClickThroughCheckBox_Changed(object sender, RoutedEventArgs e)
@@ -528,6 +634,7 @@ namespace StopwatchOverlay
             {
                 overlay.SetClickThrough(clickThrough);
             }
+            SaveSettings();
         }
 
         #region Light Ring
@@ -542,6 +649,7 @@ namespace StopwatchOverlay
             {
                 HideLightRing();
             }
+            SaveSettings();
         }
 
         private void LightRingSliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -552,12 +660,14 @@ namespace StopwatchOverlay
                 LightRingWidthLabel.Text = $"{(int)LightRingWidthSlider.Value}px";
             
             UpdateLightRingSettings();
+            SaveSettings();
         }
 
         private void LightRingSliderChanged(object sender, RoutedEventArgs e)
         {
             // Overload for checkbox events
             UpdateLightRingSettings();
+            SaveSettings();
         }
 
         private void ShowLightRing()
@@ -669,12 +779,238 @@ namespace StopwatchOverlay
 
         private void UpdateStatus(string text, Brush color)
         {
-            StatusText.Text = text;
+            StatusText.Text = Translate(text);
             StatusIndicator.Fill = color;
+        }
+
+        private void UpdateActionButtonLabels()
+        {
+            StartStopButton.Content = Translate(_isRunning ? "⏹ Stop (Win+F5)" : "▶ Start (Win+F5)");
+            ResetButton.Content = Translate("↻ Reset (Win+F6)");
+            ToggleOverlayButton.Content = Translate(_overlayWindows.Count > 0 ? "🙈 Hide (Win+F7)" : "👁 Show (Win+F7)");
+            LapButton.Content = Translate("⚑ Lap (Win+F8)");
+        }
+
+        private void SettingsControlChanged(object sender, RoutedEventArgs e) => SaveSettings();
+
+        private void SettingsTextChanged(object sender, TextChangedEventArgs e) => SaveSettings();
+
+        private string GetQuickPresetText(string tag) => tag switch
+        {
+            "1" => _quickPreset1,
+            "2" => _quickPreset2,
+            "3" => _quickPreset3,
+            "4" => _quickPreset4,
+            "5" => _quickPreset5,
+            _ => string.Empty
+        };
+
+        private void SetQuickPresetText(string tag, string minutes)
+        {
+            switch (tag)
+            {
+                case "1": _quickPreset1 = minutes; break;
+                case "2": _quickPreset2 = minutes; break;
+                case "3": _quickPreset3 = minutes; break;
+                case "4": _quickPreset4 = minutes; break;
+                case "5": _quickPreset5 = minutes; break;
+            }
+        }
+
+        private void UpdateQuickPresetButtons()
+        {
+            QuickPreset1Button.Content = $"{_quickPreset1} {Translate("min")}";
+            QuickPreset2Button.Content = $"{_quickPreset2} {Translate("min")}";
+            QuickPreset3Button.Content = $"{_quickPreset3} {Translate("min")}";
+            QuickPreset4Button.Content = $"{_quickPreset4} {Translate("min")}";
+            QuickPreset5Button.Content = $"{_quickPreset5} {Translate("min")}";
+        }
+
+        private void LoadSettings()
+        {
+            _isLoadingSettings = true;
+            try
+            {
+                var settings = UserSettingsStore.Load();
+                _language = settings.Language is "zh" ? "zh" : "en";
+                LanguageSelector.SelectedIndex = _language == "zh" ? 1 : 0;
+                _overlayPositions = settings.OverlayPositions ?? new Dictionary<string, OverlayPosition>();
+                SelectComboBoxItem(ThemeModeSelector, settings.Theme);
+                ScreenSelector.SelectedIndex = Math.Clamp(settings.ScreenIndex, 0, ScreenSelector.Items.Count - 1);
+                SelectComboBoxItem(PositionSelector, settings.Position);
+                SelectComboBoxItem(TextColorSelector, settings.TextColor);
+                SelectComboBoxItem(BorderColorSelector, settings.BorderColor);
+                SelectComboBoxItem(FontSelector, settings.Font);
+                TimeFormatSelector.SelectedIndex = Math.Clamp(settings.TimeFormat, 0, TimeFormatSelector.Items.Count - 1);
+                TextSizeSlider.Value = Math.Clamp(settings.TextSize, TextSizeSlider.Minimum, TextSizeSlider.Maximum);
+                BorderWidthSlider.Value = Math.Clamp(settings.BorderWidth, BorderWidthSlider.Minimum, BorderWidthSlider.Maximum);
+                BackgroundOpacitySlider.Value = Math.Clamp(settings.BackgroundOpacity, BackgroundOpacitySlider.Minimum, BackgroundOpacitySlider.Maximum);
+                AutoStartCheckBox.IsChecked = settings.AutoStart;
+                ShowRecIndicatorCheckBox.IsChecked = settings.ShowRecIndicator;
+                ClickThroughCheckBox.IsChecked = settings.ClickThrough;
+                BlinkColonCheckBox.IsChecked = settings.BlinkColon;
+                CountdownHours.Text = settings.CountdownHours;
+                CountdownMinutes.Text = settings.CountdownMinutes;
+                CountdownSeconds.Text = settings.CountdownSeconds;
+                _quickPreset1 = settings.QuickPreset1;
+                _quickPreset2 = settings.QuickPreset2;
+                _quickPreset3 = settings.QuickPreset3;
+                _quickPreset4 = settings.QuickPreset4;
+                _quickPreset5 = settings.QuickPreset5;
+                UpdateQuickPresetButtons();
+                LightRingBrightnessSlider.Value = Math.Clamp(settings.LightRingBrightness, LightRingBrightnessSlider.Minimum, LightRingBrightnessSlider.Maximum);
+                LightRingWidthSlider.Value = Math.Clamp(settings.LightRingWidth, LightRingWidthSlider.Minimum, LightRingWidthSlider.Maximum);
+                LightRingHideFromCaptureCheckBox.IsChecked = settings.LightRingHideFromCapture;
+                LightRingCheckBox.IsChecked = settings.LightRingEnabled;
+
+                (settings.Mode switch
+                {
+                    1 => ClockModeRadio,
+                    2 => CountdownModeRadio,
+                    3 => TimecodeModeRadio,
+                    _ => StopwatchModeRadio
+                }).IsChecked = true;
+
+                _timeFormat = TimeFormatSelector.SelectedIndex;
+                AppearanceSliderChanged(this, null!);
+                LightRingSliderChanged(this, new RoutedEventArgs());
+            }
+            finally
+            {
+                _isLoadingSettings = false;
+            }
+        }
+
+        private static void SelectComboBoxItem(System.Windows.Controls.ComboBox comboBox, string content)
+        {
+            var item = comboBox.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(x => string.Equals(x.Content?.ToString(), content, StringComparison.Ordinal));
+            if (item != null) comboBox.SelectedItem = item;
+        }
+
+        private void SaveSettings()
+        {
+            if (_isLoadingSettings || !_canSaveSettings) return;
+
+            UserSettingsStore.Save(new UserSettings
+            {
+                Mode = _currentMode,
+                ScreenIndex = ScreenSelector.SelectedIndex,
+                Theme = GetComboBoxContent(ThemeModeSelector, "Dark"),
+                Language = _language,
+                Position = GetComboBoxContent(PositionSelector, "Top Center"),
+                TextColor = GetComboBoxContent(TextColorSelector, "White"),
+                BorderColor = GetComboBoxContent(BorderColorSelector, "Black"),
+                Font = GetComboBoxContent(FontSelector, "Consolas"),
+                TimeFormat = TimeFormatSelector.SelectedIndex,
+                TextSize = TextSizeSlider.Value,
+                BorderWidth = BorderWidthSlider.Value,
+                BackgroundOpacity = BackgroundOpacitySlider.Value,
+                AutoStart = AutoStartCheckBox.IsChecked == true,
+                ShowRecIndicator = ShowRecIndicatorCheckBox.IsChecked == true,
+                ClickThrough = ClickThroughCheckBox.IsChecked == true,
+                BlinkColon = BlinkColonCheckBox.IsChecked == true,
+                CountdownHours = CountdownHours.Text,
+                CountdownMinutes = CountdownMinutes.Text,
+                CountdownSeconds = CountdownSeconds.Text,
+                QuickPreset1 = _quickPreset1,
+                QuickPreset2 = _quickPreset2,
+                QuickPreset3 = _quickPreset3,
+                QuickPreset4 = _quickPreset4,
+                QuickPreset5 = _quickPreset5,
+                LightRingEnabled = LightRingCheckBox.IsChecked == true,
+                LightRingBrightness = LightRingBrightnessSlider.Value,
+                LightRingWidth = LightRingWidthSlider.Value,
+                LightRingHideFromCapture = LightRingHideFromCaptureCheckBox.IsChecked == true,
+                OverlayPositions = new Dictionary<string, OverlayPosition>(_overlayPositions)
+            });
+        }
+
+        private static string GetComboBoxContent(System.Windows.Controls.ComboBox comboBox, string defaultValue) =>
+            (comboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? defaultValue;
+
+        private void ApplyLanguage()
+        {
+            Title = Translate("Stopwatch Controller");
+            TranslateElement(this);
+            UpdateQuickPresetButtons();
+            UpdateActionButtonLabels();
+        }
+
+        private void TranslateElement(object element)
+        {
+            if (element is ComboBoxItem) return; // These are configuration values, not UI labels.
+            if (element is TextBlock textBlock) textBlock.Text = Translate(textBlock.Text);
+            if (element is ContentControl contentControl && contentControl.Content is string content)
+                contentControl.Content = Translate(content);
+
+            if (element is not DependencyObject dependencyObject) return;
+            foreach (var child in LogicalTreeHelper.GetChildren(dependencyObject))
+                TranslateElement(child);
+        }
+
+        private string Translate(string text)
+        {
+            var translations = new Dictionary<string, string>
+            {
+                ["Stopwatch Controller"] = "秒表控制器",
+                ["Stopwatch Overlay"] = "秒表悬浮窗",
+                ["Stopwatch"] = "秒表",
+                ["Clock"] = "时钟",
+                ["Countdown"] = "倒计时",
+                ["Timecode"] = "时间码",
+                ["Duration:"] = "时长：",
+                ["h"] = "小时",
+                ["min"] = "分钟",
+                ["sec"] = "秒",
+                ["▶ Start (Win+F5)"] = "▶ 开始 (Win+F5)",
+                ["⏹ Stop (Win+F5)"] = "⏹ 停止 (Win+F5)",
+                ["↻ Reset (Win+F6)"] = "↻ 重置 (Win+F6)",
+                ["👁 Show (Win+F7)"] = "👁 显示 (Win+F7)",
+                ["🙈 Hide (Win+F7)"] = "🙈 隐藏 (Win+F7)",
+                ["⚑ Lap (Win+F8)"] = "⚑ 计次 (Win+F8)",
+                ["Ready"] = "就绪",
+                ["Running"] = "运行中",
+                ["Paused"] = "已暂停",
+                ["Reset"] = "已重置",
+                ["Overlay Hidden"] = "悬浮窗已隐藏",
+                ["Auto-start on show"] = "显示时自动开始",
+                ["REC indicator"] = "录制指示器",
+                ["Click-through"] = "鼠标穿透",
+                ["Blink colon"] = "闪烁冒号",
+                ["Settings"] = "设置",
+                ["Lap Times"] = "计次记录",
+                ["Screen & Position"] = "屏幕与位置",
+                ["Appearance"] = "外观",
+                ["Light Ring (Screen Border)"] = "光环（屏幕边框）",
+                ["Theme:"] = "主题：",
+                ["Screen:"] = "屏幕：",
+                ["Position:"] = "位置：",
+                ["Language:"] = "语言：",
+                ["Text:"] = "文字：",
+                ["Border:"] = "描边：",
+                ["Font:"] = "字体：",
+                ["Format:"] = "格式：",
+                ["Size:"] = "大小：",
+                ["Outline:"] = "轮廓：",
+                ["BG:"] = "背景：",
+                ["Enable"] = "启用",
+                ["Brightness:"] = "亮度：",
+                ["Width:"] = "宽度：",
+                ["Hide from screen capture"] = "录屏时隐藏",
+                ["Right-click to edit"] = "右键点击编辑",
+                ["Press Win+F8 or click Lap to record split times"] = "按 Win+F8 或点击计次记录分段时间",
+                ["Win+F5 Start/Stop  Win+F6 Reset  Win+F7 Overlay  Win+F8 Lap"] = "Win+F5 开始/暂停  Win+F6 重置  Win+F7 悬浮窗  Win+F8 计次"
+            };
+
+            if (_language == "zh") return translations.TryGetValue(text, out var chinese) ? chinese : text;
+            var english = translations.FirstOrDefault(pair => pair.Value == text).Key;
+            return english ?? text;
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            SaveSettings();
             // Unregister hotkeys
             var helper = new WindowInteropHelper(this);
             UnregisterHotKey(helper.Handle, HOTKEY_START_STOP);

@@ -22,6 +22,8 @@ namespace StopwatchOverlay
 
         private bool _isClickThrough = false;
 
+        public event EventHandler? PositionChangedByUser;
+
         public OverlayWindow()
         {
             InitializeComponent();
@@ -102,6 +104,7 @@ namespace StopwatchOverlay
             if (!_isClickThrough && e.LeftButton == MouseButtonState.Pressed)
             {
                 DragMove();
+                PositionChangedByUser?.Invoke(this, EventArgs.Empty);
             }
         }
 
