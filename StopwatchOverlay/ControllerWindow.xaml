@@ -6,6 +6,7 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
         MinWidth="640" MinHeight="620"
+        ShowInTaskbar="False"
         Closing="Window_Closing">
     
     <Grid>

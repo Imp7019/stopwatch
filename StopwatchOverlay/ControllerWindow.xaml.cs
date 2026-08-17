@@ -65,6 +65,10 @@ namespace StopwatchOverlay
         private readonly ObservableCollection<string> _lapTimes = new();
         private int _lapCount = 0;
         private HwndSource? _hwndSource;
+        private NotifyIcon? _trayIcon;
+        private ToolStripMenuItem? _trayShowMenuItem;
+        private ToolStripMenuItem? _trayExitMenuItem;
+        private bool _isExiting;
 
         public ControllerWindow()
         {
@@ -74,6 +78,7 @@ namespace StopwatchOverlay
             #pragma warning restore WPF0001
 
             InitializeComponent();
+            InitializeTrayIcon();
 
             _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _timer.Tick += Timer_Tick;
@@ -104,6 +109,54 @@ namespace StopwatchOverlay
             _canSaveSettings = true;
             _languageReady = true;
             ApplyLanguage();
+        }
+
+        private void InitializeTrayIcon()
+        {
+            var menu = new ContextMenuStrip();
+            _trayShowMenuItem = new ToolStripMenuItem();
+            _trayShowMenuItem.Click += (_, _) => ShowController();
+            _trayExitMenuItem = new ToolStripMenuItem();
+            _trayExitMenuItem.Click += (_, _) => ExitApplication();
+            menu.Items.Add(_trayShowMenuItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(_trayExitMenuItem);
+
+            _trayIcon = new NotifyIcon
+            {
+                Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? System.Drawing.SystemIcons.Application,
+                ContextMenuStrip = menu,
+                Visible = true
+            };
+            _trayIcon.DoubleClick += (_, _) => ShowController();
+            StateChanged += (_, _) =>
+            {
+                if (WindowState == WindowState.Minimized) Hide();
+            };
+            UpdateTrayText();
+        }
+
+        private void ShowController()
+        {
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+        }
+
+        private void ExitApplication()
+        {
+            _isExiting = true;
+            Close();
+        }
+
+        private void UpdateTrayText()
+        {
+            if (_trayIcon == null) return;
+
+            bool chinese = _language == "zh";
+            _trayIcon.Text = chinese ? "秒表悬浮窗" : "Stopwatch Overlay";
+            if (_trayShowMenuItem != null) _trayShowMenuItem.Text = chinese ? "显示控制器" : "Show controller";
+            if (_trayExitMenuItem != null) _trayExitMenuItem.Text = chinese ? "退出" : "Exit";
         }
 
         private void ThemeModeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -940,6 +993,7 @@ namespace StopwatchOverlay
             TranslateElement(this);
             UpdateQuickPresetButtons();
             UpdateActionButtonLabels();
+            UpdateTrayText();
         }
 
         private void TranslateElement(object element)
@@ -1017,6 +1071,14 @@ namespace StopwatchOverlay
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (!_isExiting)
+            {
+                SaveSettings();
+                e.Cancel = true;
+                Hide();
+                return;
+            }
+
             SaveSettings();
             // Unregister hotkeys
             var helper = new WindowInteropHelper(this);
@@ -1029,6 +1091,7 @@ namespace StopwatchOverlay
             foreach (var lightRing in _lightRingWindows) lightRing.Close();
             _timer.Stop();
             _blinkTimer.Stop();
+            _trayIcon?.Dispose();
         }
     }
 }
