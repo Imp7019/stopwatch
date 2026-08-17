@@ -22,6 +22,7 @@ bld/
 [Ll]ogs/
 
 ## Build results
+artifacts/
 [Dd]ebugPublic/
 *.appx
 *.appxbundle
