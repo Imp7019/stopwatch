@@ -129,6 +129,8 @@
                       Unchecked="ClickThroughCheckBox_Changed" Margin="0,0,15,0"/>
             <CheckBox x:Name="BlinkColonCheckBox" Content="Blink colon" 
                       Margin="0,0,0,0"/>
+            <CheckBox x:Name="CountdownVisualAlertCheckBox" Content="Flash overlay when countdown ends"
+                      Margin="15,0,0,0"/>
         </WrapPanel>
 
         <!-- Settings Expander -->

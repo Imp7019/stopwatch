@@ -24,6 +24,7 @@ public sealed class UserSettings
     public bool ShowRecIndicator { get; set; }
     public bool ClickThrough { get; set; }
     public bool BlinkColon { get; set; }
+    public bool FlashOverlayOnCountdownComplete { get; set; }
     public string CountdownHours { get; set; } = "0";
     public string CountdownMinutes { get; set; } = "5";
     public string CountdownSeconds { get; set; } = "00";

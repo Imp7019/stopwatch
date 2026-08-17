@@ -49,6 +49,8 @@ namespace StopwatchOverlay
         private TimeSpan _countdownDuration = TimeSpan.FromMinutes(5);
         private TimeSpan _countdownRemaining;
         private bool _countdownStarted;
+        private bool _countdownCompleted;
+        private bool _countdownAlertVisible;
         private bool _colonVisible = true;
         private int _timeFormat = 0; // 0=HH:MM:SS.t, 1=HH:MM:SS, 2=MM:SS.t, 3=MM:SS
         private int _frameRate = 30;
@@ -98,6 +100,8 @@ namespace StopwatchOverlay
             AutoStartCheckBox.Unchecked += SettingsControlChanged;
             BlinkColonCheckBox.Checked += SettingsControlChanged;
             BlinkColonCheckBox.Unchecked += SettingsControlChanged;
+            CountdownVisualAlertCheckBox.Checked += SettingsControlChanged;
+            CountdownVisualAlertCheckBox.Unchecked += SettingsControlChanged;
             CountdownHours.TextChanged += SettingsTextChanged;
             CountdownMinutes.TextChanged += SettingsTextChanged;
             CountdownSeconds.TextChanged += SettingsTextChanged;
@@ -240,9 +244,10 @@ namespace StopwatchOverlay
             if (_currentMode == 2 && _isRunning) // Countdown mode
             {
                 _countdownRemaining -= TimeSpan.FromMilliseconds(50);
-                // Flash status when hitting zero
-                if (_countdownRemaining <= TimeSpan.Zero && _countdownRemaining > TimeSpan.FromMilliseconds(-100))
+                // Dispatcher ticks can be delayed, so notify once on the first tick at or below zero.
+                if (_countdownRemaining <= TimeSpan.Zero && !_countdownCompleted)
                 {
+                    _countdownCompleted = true;
                     UpdateStatus("Time's up! (counting negative)", Brushes.Red);
                 }
             }
@@ -259,6 +264,17 @@ namespace StopwatchOverlay
             else
             {
                 _colonVisible = true;
+            }
+
+            if (_currentMode == 2 && _countdownCompleted && CountdownVisualAlertCheckBox?.IsChecked == true)
+            {
+                _countdownAlertVisible = !_countdownAlertVisible;
+                SetCountdownAlert(_countdownAlertVisible);
+            }
+            else if (_countdownAlertVisible)
+            {
+                _countdownAlertVisible = false;
+                SetCountdownAlert(false);
             }
 
             // Blink REC indicator
@@ -381,6 +397,8 @@ namespace StopwatchOverlay
                     _countdownDuration = TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
                     _countdownRemaining = _countdownDuration;
                     _countdownStarted = true;
+                    _countdownCompleted = false;
+                    SetCountdownAlert(false);
                 }
                 
                 _stopwatch.Start();
@@ -460,6 +478,8 @@ namespace StopwatchOverlay
                 _countdownDuration = TimeSpan.FromHours(hours) + TimeSpan.FromMinutes(mins) + TimeSpan.FromSeconds(secs);
                 _countdownRemaining = _countdownDuration;
                 _countdownStarted = false;
+                _countdownCompleted = false;
+                SetCountdownAlert(false);
             }
             
             _lapTimes.Clear();
@@ -553,6 +573,13 @@ namespace StopwatchOverlay
                     Top = overlay.Top
                 };
                 SaveSettings();
+            };
+            overlay.DoubleClicked += (_, _) =>
+            {
+                if (_currentMode == 2 && _isRunning)
+                {
+                    ShowController();
+                }
             };
             
             if (ClickThroughCheckBox?.IsChecked == true)
@@ -837,6 +864,15 @@ namespace StopwatchOverlay
             StatusIndicator.Fill = color;
         }
 
+        private void SetCountdownAlert(bool isVisible)
+        {
+            _countdownAlertVisible = isVisible;
+            foreach (var overlay in _overlayWindows)
+            {
+                overlay.SetCountdownAlert(isVisible);
+            }
+        }
+
         private void UpdateActionButtonLabels()
         {
             var startStopLabel = _currentMode == 2
@@ -907,6 +943,7 @@ namespace StopwatchOverlay
                 ShowRecIndicatorCheckBox.IsChecked = settings.ShowRecIndicator;
                 ClickThroughCheckBox.IsChecked = settings.ClickThrough;
                 BlinkColonCheckBox.IsChecked = settings.BlinkColon;
+                CountdownVisualAlertCheckBox.IsChecked = settings.FlashOverlayOnCountdownComplete;
                 CountdownHours.Text = settings.CountdownHours;
                 CountdownMinutes.Text = settings.CountdownMinutes;
                 CountdownSeconds.Text = settings.CountdownSeconds;
@@ -968,6 +1005,7 @@ namespace StopwatchOverlay
                 ShowRecIndicator = ShowRecIndicatorCheckBox.IsChecked == true,
                 ClickThrough = ClickThroughCheckBox.IsChecked == true,
                 BlinkColon = BlinkColonCheckBox.IsChecked == true,
+                FlashOverlayOnCountdownComplete = CountdownVisualAlertCheckBox.IsChecked == true,
                 CountdownHours = CountdownHours.Text,
                 CountdownMinutes = CountdownMinutes.Text,
                 CountdownSeconds = CountdownSeconds.Text,
@@ -1039,6 +1077,7 @@ namespace StopwatchOverlay
                 ["REC indicator"] = "录制指示器",
                 ["Click-through"] = "鼠标穿透",
                 ["Blink colon"] = "闪烁冒号",
+                ["Flash overlay when countdown ends"] = "倒计时结束时闪动悬浮窗",
                 ["Settings"] = "设置",
                 ["Lap Times"] = "计次记录",
                 ["Screen & Position"] = "屏幕与位置",

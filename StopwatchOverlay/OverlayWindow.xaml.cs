@@ -21,8 +21,12 @@ namespace StopwatchOverlay
         private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
         private bool _isClickThrough = false;
+        private bool _isDragPending;
+        private Point _dragStartPosition;
+        private double _backgroundOpacity = 0.5;
 
         public event EventHandler? PositionChangedByUser;
+        public event EventHandler? DoubleClicked;
 
         public OverlayWindow()
         {
@@ -84,8 +88,8 @@ namespace StopwatchOverlay
             UpdateShadowOffset(TimeTextShadow4, -borderWidth, borderWidth);
 
             // Apply background opacity
-            byte alpha = (byte)(backgroundOpacity * 255);
-            OverlayBorder.Background = new SolidColorBrush(Color.FromArgb(alpha, 0, 0, 0));
+            _backgroundOpacity = backgroundOpacity;
+            SetCountdownAlert(false);
         }
 
         private void UpdateShadowOffset(System.Windows.Controls.TextBlock textBlock, double x, double y)
@@ -98,14 +102,51 @@ namespace StopwatchOverlay
             RecIndicator.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        public void SetCountdownAlert(bool isFlashing)
+        {
+            OverlayBorder.Background = isFlashing
+                ? new SolidColorBrush(Color.FromArgb(235, 180, 0, 0))
+                : new SolidColorBrush(Color.FromArgb((byte)(_backgroundOpacity * 255), 0, 0, 0));
+        }
+
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Allow dragging the overlay window (only if not click-through)
+            if (e.ClickCount == 2)
+            {
+                _isDragPending = false;
+                ReleaseMouseCapture();
+                DoubleClicked?.Invoke(this, EventArgs.Empty);
+                e.Handled = true;
+                return;
+            }
+
+            // Wait until the pointer actually moves before dragging. This preserves double-clicks.
             if (!_isClickThrough && e.LeftButton == MouseButtonState.Pressed)
             {
-                DragMove();
-                PositionChangedByUser?.Invoke(this, EventArgs.Empty);
+                _dragStartPosition = e.GetPosition(this);
+                _isDragPending = CaptureMouse();
             }
+        }
+
+        private void Window_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isDragPending || e.LeftButton != MouseButtonState.Pressed) return;
+
+            var currentPosition = e.GetPosition(this);
+            if (Math.Abs(currentPosition.X - _dragStartPosition.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(currentPosition.Y - _dragStartPosition.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            _isDragPending = false;
+            ReleaseMouseCapture();
+            DragMove();
+            PositionChangedByUser?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            _isDragPending = false;
+            ReleaseMouseCapture();
         }
 
         public void SetClickThrough(bool clickThrough)
